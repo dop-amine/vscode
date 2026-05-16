@@ -30,7 +30,7 @@ import { ChatAgentLocation } from '../../../common/constants.js';
 import { ChatRequestQueueKind, ElicitationState, IChatService, IChatMarkdownContent, IChatProgress, IChatTerminalToolInvocationData, IChatToolInputInvocationData, IChatToolInvocation, IChatToolInvocationSerialized, IChatUsage, ToolConfirmKind } from '../../../common/chatService/chatService.js';
 import { IChatEditingService } from '../../../common/editing/chatEditingService.js';
 import { IMarkdownString } from '../../../../../../base/common/htmlContent.js';
-import { IChatSessionsService, type IChatSessionRequestHistoryItem } from '../../../common/chatSessionsService.js';
+import { ChatSessionStatus, IChatSessionsService, type IChatSessionRequestHistoryItem } from '../../../common/chatSessionsService.js';
 import { ILanguageModelsService, type ILanguageModelChatMetadata } from '../../../common/languageModels.js';
 import { IProductService } from '../../../../../../platform/product/common/productService.js';
 import { IOpenerService } from '../../../../../../platform/opener/common/opener.js';
@@ -849,12 +849,20 @@ suite('AgentHostChatContribution', () => {
 			assert.strictEqual(item.resource.scheme, 'agent-host-copilot');
 			assert.ok(!item.resource.path.substring(1).startsWith('untitled-'));
 			assert.strictEqual(listController.isNewSession(item.resource), true);
-			assert.strictEqual(listController.items.some(existing => existing.resource.toString() === item.resource.toString()), false);
+			assert.deepStrictEqual(listController.items.map(item => ({ resource: item.resource.toString(), status: item.status })), [{
+				resource: item.resource.toString(),
+				status: ChatSessionStatus.InProgress,
+			}]);
 
 			const { turnPromise, session, turnId, fire } = await startTurn(sessionHandler, agentHostService, chatAgentService, disposables, {
 				message: 'Hello from controller',
 				sessionResource: item.resource,
 			});
+
+			const visibleItem = listController.items.find(existing => existing.resource.toString() === item.resource.toString());
+			assert.ok(visibleItem);
+			assert.strictEqual(visibleItem.status, ChatSessionStatus.InProgress);
+
 			fire({ type: 'session/turnComplete', session, turnId } as SessionAction);
 			await turnPromise;
 
@@ -865,6 +873,25 @@ suite('AgentHostChatContribution', () => {
 			assert.strictEqual(listController.isNewSession(item.resource), false);
 			assert.strictEqual(listController.items.some(existing => existing.resource.toString() === item.resource.toString()), true);
 		}));
+
+		test('pending new session stays visible across refresh before backend listing', async () => {
+			const { listController } = createContribution(disposables);
+
+			const item = await listController.newChatSessionItem({ prompt: 'Hello from controller' }, CancellationToken.None);
+			assert.ok(item);
+
+			assert.deepStrictEqual(listController.items.map(item => ({ resource: item.resource.toString(), status: item.status })), [{
+				resource: item.resource.toString(),
+				status: ChatSessionStatus.InProgress,
+			}]);
+
+			await listController.refresh(CancellationToken.None);
+
+			assert.deepStrictEqual(listController.items.map(item => ({ resource: item.resource.toString(), status: item.status })), [{
+				resource: item.resource.toString(),
+				status: ChatSessionStatus.InProgress,
+			}]);
+		});
 
 		test('newChatSessionItem rebinds untitled provisional to real resource so chip-selected config survives first send', () => runWithFakedTimers({ useFakeTimers: true }, async () => {
 			const { instantiationService, agentHostService } = createTestServices(disposables);
