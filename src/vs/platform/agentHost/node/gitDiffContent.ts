@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { decodeHex, encodeHex, VSBuffer } from '../../../base/common/buffer.js';
-import { basename } from '../../../base/common/path.js';
 import { URI } from '../../../base/common/uri.js';
 
 const GIT_BLOB_SCHEME = 'git-blob';
@@ -21,8 +20,8 @@ const GIT_BLOB_SCHEME = 'git-blob';
 export function buildGitBlobUri(sessionUri: string, sha: string, repoRelativePath: string): string {
 	return URI.from({
 		scheme: GIT_BLOB_SCHEME,
-		authority: encodeHex(VSBuffer.fromString(sessionUri)).toString(),
-		path: `/${encodeURIComponent(sha)}/${encodeHex(VSBuffer.fromString(repoRelativePath))}/${basename(repoRelativePath)}`,
+		authority: `${encodeHex(VSBuffer.fromString(sessionUri))}.${encodeHex(VSBuffer.fromString(sha))}`,
+		path: `/${repoRelativePath}`,
 	}).toString();
 }
 
@@ -47,6 +46,20 @@ export function parseGitBlobUri(raw: string): IGitBlobUriFields | undefined {
 	if (parsed.scheme !== GIT_BLOB_SCHEME) {
 		return undefined;
 	}
+
+	const [encodedSessionUri, encodedSha] = parsed.authority.split('.');
+	if (encodedSessionUri && encodedSha) {
+		try {
+			return {
+				sessionUri: decodeHex(encodedSessionUri).toString(),
+				sha: decodeHex(encodedSha).toString(),
+				repoRelativePath: parsed.path.slice(1),
+			};
+		} catch {
+			return undefined;
+		}
+	}
+
 	const [, sha, encodedPath] = parsed.path.split('/');
 	if (!sha || !encodedPath) {
 		return undefined;

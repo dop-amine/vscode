@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from 'assert';
+import { encodeHex, VSBuffer } from '../../../../base/common/buffer.js';
 import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../base/test/common/utils.js';
 import { buildGitBlobUri, parseGitBlobUri } from '../../node/gitDiffContent.js';
 
@@ -17,6 +18,7 @@ suite('gitDiffContent', () => {
 		const built = buildGitBlobUri(sessionUri, sha, path);
 		const parsed = parseGitBlobUri(built);
 		assert.deepStrictEqual(parsed, { sessionUri, sha, repoRelativePath: path });
+		assert.strictEqual(new URL(built).pathname, '/src/foo/bar.ts');
 	});
 
 	test('round-trips paths with spaces, unicode and slashes', () => {
@@ -31,5 +33,14 @@ suite('gitDiffContent', () => {
 		assert.strictEqual(parseGitBlobUri('file:///foo/bar.ts'), undefined);
 		assert.strictEqual(parseGitBlobUri('session-db://abc/def/before/x'), undefined);
 		assert.strictEqual(parseGitBlobUri('not a uri at all'), undefined);
+	});
+
+	test('parses legacy git blob URI shape', () => {
+		const sessionUri = 'copilot:/abc-123';
+		const sha = 'deadbeef0123456789abcdef0123456789abcdef';
+		const repoRelativePath = 'src/foo/bar.ts';
+		const legacy = `git-blob://${encodeHex(VSBuffer.fromString(sessionUri))}/${encodeURIComponent(sha)}/${encodeHex(VSBuffer.fromString(repoRelativePath))}/bar.ts`;
+
+		assert.deepStrictEqual(parseGitBlobUri(legacy), { sessionUri, sha, repoRelativePath });
 	});
 });
